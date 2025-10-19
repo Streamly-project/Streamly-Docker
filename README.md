@@ -1,89 +1,89 @@
-# Streamly-Docker — Environnement local
+# Streamly-Docker — Local Environment
 
-Ce dépôt sert **exclusivement** à lancer en local l’environnement Docker requis par l’application **Streamly** (hébergée dans un autre dépôt). Il fournit une base **PostgreSQL 16** et **Adminer** (UI web) pour gérer la base.
+This repository is **exclusively** used to run the Docker environment required by the **Streamly** application (hosted in a separate repository) locally. It provides a **PostgreSQL 16** database and **Adminer** (web UI) to manage the database.
 
-> ⚠️ Les identifiants/ports par défaut sont pensés pour le **développement local** uniquement.
+> ⚠️ Default credentials/ports are intended for **local development** only.
 
 ---
 
-## Prérequis
+## Prerequisites
 
 * **Docker** & **Docker Compose**
 
 ---
 
-## Démarrage express
+## Quick Start
 
 ```bash
-# 1) Cloner puis entrer dans le repo
+# 1) Clone and enter the repository
 git clone https://github.com/Streamly-project/Streamly-Docker.git
 cd Streamly-Docker
 
-# 2) Lancer les conteneurs
+# 2) Start the containers
 docker compose up -d
 
-# 3) Vérifier
+# 3) Verify
 docker compose ps
 ```
 
-* **Postgres** écoute sur `localhost:5432`
-* **Adminer** est accessible sur `http://localhost:8080`
+* **Postgres** listens on `localhost:5432`
+* **Adminer** is accessible at `http://localhost:8080`
 
-**Connexion Adminer** :
+**Adminer Connection** :
 
-* Système : `PostgreSQL`
-* Serveur : `postgres` (depuis le réseau Docker) **ou** `localhost`
-* Utilisateur : `postgres`
-* Mot de passe : `postgres`
-* Base : `streamly`
+* System: `PostgreSQL`
+* Server: `postgres` (from Docker network) **or** `localhost`
+* Username: `postgres`
+* Password: `postgres`
+* Database: `streamly`
 
 ---
 
-## Utilisation côté application (repo Streamly)
+## Application Usage (Streamly Repository)
 
-L’application **Streamly** utilise **Prisma** et ton dossier `prisma/` existe déjà.
+The **Streamly** application uses **Prisma** and your `prisma/` folder already exists.
 
-1. (Si besoin) Installer les deps Prisma :
+1. (If needed) Install Prisma dependencies:
 
 ```bash
 npm i -D prisma
 npm i @prisma/client
 ```
 
-2. Configurer l’URL de la base dans le `.env` de l’app :
+2. Configure the database URL in the application's `.env`:
 
 ```env
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/streamly?schema=public"
 ```
 
-> Adapte le port si tu as modifié le mapping dans `docker-compose.yml`.
+> Adjust the port if you have modified the mapping in `docker-compose.yml`.
 
-3. Générer le client Prisma :
+3. Generate the Prisma client:
 
 ```bash
 npx prisma generate
 ```
 
-4. Appliquer le schéma :
+4. Apply the schema:
 
-* Si tu as déjà des migrations :
+* If you already have migrations:
 
   ```bash
   npx prisma migrate dev --name init
   ```
-* Sinon, pousser le schéma directement :
+* Otherwise, push the schema directly:
 
   ```bash
   npx prisma db push
   ```
 
-5. (Optionnel) Ouvrir Prisma Studio :
+5. (Optional) Open Prisma Studio:
 
 ```bash
 npx prisma studio
 ```
 
-6. Démarrer l’application :
+6. Start the application:
 
 ```bash
 npm run dev
@@ -91,21 +91,21 @@ npm run dev
 
 ---
 
-## Commandes utiles
+## Useful Commands
 
 ```bash
-# Voir l’état des conteneurs
+# View container status
 docker compose ps
 
-# Logs en direct (Postgres)
+# Live logs (Postgres)
 docker compose logs -f postgres
 
-# Ouvrir un shell psql dans le conteneur Postgres
+# Open a psql shell in the Postgres container
 docker exec -it $(docker ps -qf name=postgres) psql -U postgres -d streamly
 
-# Arrêter la stack
+# Stop the stack
 docker compose down
 
-# Réinitialiser complètement (⚠️ efface la base locale)
+# Completely reset (⚠️ deletes local database)
 docker compose down -v
 ```
