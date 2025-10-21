@@ -1,8 +1,6 @@
 # Streamly-Docker — Local Environment
 
-This repository is **exclusively** used to run the Docker environment required by the **Streamly** application (hosted in a separate repository) locally. It provides a **PostgreSQL 16** database and **Adminer** (web UI) to manage the database.
-
-> ⚠️ Default credentials/ports are intended for **local development** only.
+This repo spins up a **PostgreSQL 16** database for the **Streamly** app (app code lives in a separate repository).
 
 ---
 
@@ -12,100 +10,125 @@ This repository is **exclusively** used to run the Docker environment required b
 
 ---
 
-## Quick Start
+## What’s inside
 
-```bash
-# 1) Clone and enter the repository
-git clone https://github.com/Streamly-project/Streamly-Docker.git
-cd Streamly-Docker
-
-# 2) Start the containers
-docker compose up -d
-
-# 3) Verify
-docker compose ps
-```
-
-* **Postgres** listens on `localhost:5432`
-* **Adminer** is accessible at `http://localhost:8080`
-
-**Adminer Connection** :
-
-* System: `PostgreSQL`
-* Server: `postgres` (from Docker network) **or** `localhost`
-* Username: `postgres`
-* Password: `postgres`
-* Database: `streamly`
+* `docker-compose.yml` → Postgres + a one-shot **init-seed** service
+* `sql/init.sql` → your SQL script executed once at startup (you can comment out the service later)
 
 ---
 
-## Application Usage (Streamly Repository)
-
-The **Streamly** application uses **Prisma** and your `prisma/` folder already exists.
-
-1. (If needed) Install Prisma dependencies:
+## Quick Start
 
 ```bash
-npm i -D prisma
-npm i @prisma/client
+# From this repository
+docker compose up -d
+
+# Check status
+docker compose ps
 ```
 
-2. Configure the database URL in the application's `.env`:
+When Postgres shows **healthy**, apply your app schema from the **Streamly** app repo:
+
+```bash
+cd ../Streamly                    # go to the app repo (adjust path)
+# Apply existing migrations (recommended)
+npx prisma migrate deploy
+# If you have no migrations yet (dev only):
+# npx prisma db push
+npx prisma generate
+```
+
+**Seed script** (runs once): the `init-seed` service executes `./sql/init.sql` after Postgres is ready to accept connections. To run it again later:
+
+```bash
+cd ../Streamly-Docker
+# re-run the one-shot job only
+docker compose up --force-recreate --no-deps init-seed
+# see logs
+docker compose logs init-seed
+```
+
+To **disable** seeding, comment the `init-seed` service in `docker-compose.yml` and `docker compose up -d` again.
+
+---
+
+## Configuration
+
+* Postgres listens on **`localhost:5432`**
+* Default credentials: `postgres / postgres`
+* Default DB: `streamly`
+
+In your **Streamly app** `.env`:
 
 ```env
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/streamly?schema=public"
 ```
 
-> Adjust the port if you have modified the mapping in `docker-compose.yml`.
+> If you change ports or credentials in `docker-compose.yml`, reflect that here.
 
-3. Generate the Prisma client:
+**Healthcheck?** It waits until the database actually **accepts connections** before dependent services (like the seed job) run. It does **not** apply migrations for you. Do that from the app repo as shown above.
 
-```bash
-npx prisma generate
+---
+
+## Seeding
+
+Place idempotent SQL in `./sql/init.sql`, e.g.:
+
+```sql
+-- Create admin only if missing
+INSERT INTO "User" (username, password, role)
+SELECT 'admin', 'admin', 'ADMIN'::"Role"
+WHERE NOT EXISTS (SELECT 1 FROM "User" WHERE username = 'admin');
 ```
 
-4. Apply the schema:
+---
 
-* If you already have migrations:
+## Simple Backup / Restore
 
-  ```bash
-  npx prisma migrate dev --name init
-  ```
-* Otherwise, push the schema directly:
-
-  ```bash
-  npx prisma db push
-  ```
-
-5. (Optional) Open Prisma Studio:
+**Export** the whole DB to a plain SQL file (run from this repo; writes to `./backups/` — make sure the folder exists):
 
 ```bash
-npx prisma studio
+docker exec -e PGPASSWORD=postgres streamly-db pg_dump -U postgres -d streamly > ./backups/streamly_$(date +%F_%H%M).sql
 ```
 
-6. Start the application:
+**Restore**:
 
 ```bash
-npm run dev
-```
+docker exec -e PGPASSWORD=postgres -i streamly-db psql -U postgres -d streamly < ./backups/streamly_xxxx-xx-xx_xxxx.sql```
 
 ---
 
 ## Useful Commands
 
 ```bash
-# View container status
+# Status
 docker compose ps
 
 # Live logs (Postgres)
 docker compose logs -f postgres
 
-# Open a psql shell in the Postgres container
-docker exec -it $(docker ps -qf name=postgres) psql -U postgres -d streamly
+# psql shell inside the container
+docker exec -it streamly-db psql -U postgres -d streamly
 
-# Stop the stack
+# Stop stack
 docker compose down
 
-# Completely reset (⚠️ deletes local database)
+# Reset EVERYTHING (⚠️ deletes the local database volume)
 docker compose down -v
+
+# Remove stray/old containers attached to this project
+docker compose down --remove-orphans
 ```
+
+---
+
+## Troubleshooting
+
+* **`The table "public.User" does not exist`** in Prisma Studio → You wiped the volume or never applied the schema. From the app repo:
+
+  ```bash
+  npx prisma migrate deploy   # or: npx prisma db push
+  npx prisma generate
+  ```
+* **Seed didn’t run** → check `docker compose logs init-seed`. The seed runs **after** Postgres is healthy, but **before** your Prisma migrations unless you apply them — make sure tables exist first.
+* **Can’t connect from app** → confirm `.env` `DATABASE_URL` points to `localhost:5432` with correct creds.

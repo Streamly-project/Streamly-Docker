@@ -1,5 +1,6 @@
 services:
   postgres:
+    container_name: streamly-db
     image: postgres:16
     ports:
       - "5432:5432"
@@ -9,13 +10,27 @@ services:
       POSTGRES_DB: streamly
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # AWait until Postgres is ready to accept connections
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d streamly"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
 
-  adminer:
-    image: adminer
-    ports:
-      - "8080:8080"
+  # Execute initial SQL seed script
+  init-seed:
+    container_name: streamly-init-seed
+    image: postgres:16
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./sql:/sql:ro   # Mount the SQL directory as read-only
     environment:
-      ADMINER_DEFAULT_SERVER: postgres
+      PGPASSWORD: postgres
+    entrypoint: >
+      sh -c "psql -h postgres -U postgres -d streamly -f /sql/init.sql"
+    restart: "no"
 
 volumes:
   pgdata:
